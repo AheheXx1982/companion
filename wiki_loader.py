@@ -152,7 +152,7 @@ def build_prompt(question: str, pages: list, chat_history: list[dict] = None) ->
     
     wiki_context = "\n\n---\n\n".join(wiki_context_parts)
     
-    system = """你是 **SilentX AI Companion**（小静），嵌入在 silentxx.com 的智能助手。
+    system = """你是 **SilentX AI Companion**（X-AI 助手），嵌入在 silentxx.com 的智能助手。
 
 你的知识来源于 SilentXx 的期权知识库（LLM Wiki），内容基于期权课程整理。
 
