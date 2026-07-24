@@ -46,7 +46,7 @@ if LLM_PROVIDER == "openrouter":
 else:
     API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
     API_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1") + "/chat/completions"
-    MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
     HEADERS = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json",
