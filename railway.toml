@@ -1,0 +1,9 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+# Railway 在 companion/ 子目录下部署
+# nixpacks 会自动检测 Python + requirements.txt
+
+[service]
+port = 8000
