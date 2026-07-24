@@ -18,11 +18,14 @@ load_dotenv()
 
 app = FastAPI(title="SilentX AI Companion", version="0.1.0")
 
-# CORS
+# CORS - 支持 silentxx.com 及 www 子域名
 origins = os.getenv("CORS_ORIGIN", "http://localhost:4321").split(",")
+# 始终允许 silentxx.com 的两个变体
+cors_origins = set(o.strip() for o in origins)
+cors_origins.update({"https://silentxx.com", "https://www.silentxx.com"})
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in origins],
+    allow_origins=list(cors_origins),
     allow_methods=["POST", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
