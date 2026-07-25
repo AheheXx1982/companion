@@ -4,11 +4,12 @@ SilentX AI Companion — FastAPI Backend
 """
 import os
 import json
+import io
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from typing import Optional
 
@@ -138,6 +139,41 @@ async def chat(req: ChatRequest):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ── TTS 语音合成 ────────────────────────────────────────────
+TTS_VOICE = os.getenv("TTS_VOICE", "zh-CN-XiaoxiaoNeural")  # 微软免费中文女声
+
+
+@app.post("/api/tts")
+async def text_to_speech(req: ChatRequest):
+    """文本转语音，返回 MP3 音频"""
+    text = req.message.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty text")
+
+    # 限制长度，避免滥用
+    text = text[:1000]
+
+    try:
+        import edge_tts
+
+        buf = io.BytesIO()
+        communicate = edge_tts.Communicate(text, TTS_VOICE)
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                buf.write(chunk["data"])
+
+        buf.seek(0)
+        return Response(
+            content=buf.read(),
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": "inline"},
+        )
+    except ImportError:
+        raise HTTPException(status_code=500, detail="edge-tts not installed")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS error: {str(e)}")
 
 
 if __name__ == "__main__":
