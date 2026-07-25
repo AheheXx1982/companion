@@ -7,13 +7,14 @@ import json
 import io
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from typing import Optional
 
 from wiki_loader import load_all_pages, search_pages, build_prompt, WIKI_ROOT
+from memory_manager import get_memory_context, update_memory
 
 load_dotenv()
 
@@ -81,7 +82,7 @@ def health():
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, background_tasks: BackgroundTasks):
     if not API_KEY:
         raise HTTPException(status_code=500, detail="LLM API key not configured")
     
@@ -92,12 +93,16 @@ async def chat(req: ChatRequest):
     # 1. 检索 Wiki
     results = search_pages(question, ALL_PAGES, top_k=5)
     
-    # 2. 组装 Prompt
+    # 2. 获取记忆 + 组装 Prompt
+    memory_context = get_memory_context()
     pages_only = [p for p, _ in results]
-    messages = build_prompt(question, pages_only, req.history)
+    messages = build_prompt(question, pages_only, req.history, memory_context)
     
-    # 3. 调用 LLM 流式返回
+    # 3. 调用 LLM 流式返回 + 缓冲完整回复用于记忆
+    full_reply = ""
+    
     async def stream_response():
+        nonlocal full_reply
         async with httpx.AsyncClient(timeout=60.0) as client:
             async with client.stream(
                 "POST",
@@ -127,9 +132,13 @@ async def chat(req: ChatRequest):
                             delta = chunk.get("choices", [{}])[0].get("delta", {})
                             content = delta.get("content", "")
                             if content:
+                                full_reply += content
                                 yield f"data: {json.dumps({'content': content})}\n\n"
                         except json.JSONDecodeError:
                             continue
+    
+    # 流式完成后更新记忆
+    background_tasks.add_task(update_memory, question, "")
     
     return StreamingResponse(
         stream_response(),

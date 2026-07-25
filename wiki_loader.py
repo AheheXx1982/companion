@@ -136,7 +136,7 @@ def get_index_context() -> str:
     return ""
 
 
-def build_prompt(question: str, pages: list, chat_history: list[dict] = None) -> str:
+def build_prompt(question: str, pages: list, chat_history: list[dict] = None, memory_context: str = "") -> str:
     """
     组装 LLM Prompt
     pages 可以是 WikiPage 列表，或 (WikiPage, score) 元组列表
@@ -193,8 +193,13 @@ def build_prompt(question: str, pages: list, chat_history: list[dict] = None) ->
 ## ⚠️ 底线
 - 不推荐具体买卖，不编造行情，不确定就坦诚说
 
+## 👤 关于当前用户（从对话中了解的）
+{memory_context}
+
 ## Wiki 参考（期权模式时使用，其他模式忽略）
 """ + (wiki_context if wiki_context else "（本次无匹配的期权内容，用户可能在闲聊，直接按陪伴/娱乐模式回复）")
+
+    system = system.replace("{memory_context}", memory_context)
 
     messages = [{"role": "system", "content": system}]
     
