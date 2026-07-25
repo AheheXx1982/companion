@@ -65,6 +65,11 @@ class ChatRequest(BaseModel):
     history: Optional[list[dict]] = None  # [{"role": "user/assistant", "content": "..."}]
 
 
+class VisionRequest(BaseModel):
+    image: str          # base64 编码的图片
+    prompt: str = "请描述这张图片的内容"
+
+
 @app.get("/")
 def root():
     return {
@@ -301,6 +306,54 @@ async def volc_tts(req: ChatRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Volc TTS error: {str(e)}")
+
+
+# ── 视觉理解（OpenRouter 免费模型）────────────────────
+VISION_MODEL = os.getenv("VISION_MODEL", "google/gemini-2.0-flash-exp:free")
+OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "")
+
+
+@app.post("/api/vision")
+async def vision(req: VisionRequest):
+    """图片理解，调用免费视觉模型"""
+    if not OPENROUTER_KEY:
+        raise HTTPException(status_code=500, detail="OpenRouter API key not configured")
+
+    try:
+        # 移除 data:image/...;base64, 前缀
+        image_data = req.image
+        if "," in image_data:
+            image_data = image_data.split(",", 1)[1]
+
+        payload = {
+            "model": VISION_MODEL,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": req.prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}},
+                ],
+            }],
+            "max_tokens": 800,
+        }
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail=f"Vision API: {resp.text[:200]}")
+            data = resp.json()
+            content = data["choices"][0]["message"]["content"]
+            return {"content": content}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Vision error: {str(e)}")
 
 
 if __name__ == "__main__":
