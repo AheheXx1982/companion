@@ -265,6 +265,44 @@ async def sherpa_tts(req: ChatRequest):
         raise HTTPException(status_code=500, detail=f"Sherpa TTS error: {str(e)}")
 
 
+# ── 火山引擎 TTS（抖音同款，免费 100万字符/月）────────
+VOLC_APP_ID = os.getenv("VOLC_APP_ID", "")
+VOLC_TOKEN = os.getenv("VOLC_TOKEN", "")
+VOLC_VOICE = os.getenv("VOLC_VOICE", "BV001_streaming")  # 自然女声
+
+
+@app.post("/api/tts-volc")
+async def volc_tts(req: ChatRequest):
+    """火山引擎 TTS — 自然语音"""
+    text = req.message.strip()[:500]
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty text")
+    if not VOLC_APP_ID or not VOLC_TOKEN:
+        raise HTTPException(status_code=500, detail="Volcengine not configured")
+
+    try:
+        payload = {
+            "app": {"appid": VOLC_APP_ID, "token": VOLC_TOKEN, "cluster": "volcano_tts"},
+            "user": {"uid": "silentxx"},
+            "audio": {"voice_type": VOLC_VOICE, "encoding": "mp3", "speed_ratio": 1.0},
+            "request": {"text": text, "text_type": "plain"},
+        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://openspeech.bytedance.com/api/v1/tts",
+                headers={"Authorization": f"Bearer; {VOLC_TOKEN}", "Content-Type": "application/json"},
+                json=payload,
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail=f"Volcengine: {resp.text[:200]}")
+            return Response(content=resp.content, media_type="audio/mpeg",
+                          headers={"Content-Disposition": "inline"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Volc TTS error: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", "8000"))
