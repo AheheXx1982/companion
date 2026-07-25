@@ -185,6 +185,40 @@ async def text_to_speech(req: ChatRequest):
         raise HTTPException(status_code=500, detail=f"TTS error: {str(e)}")
 
 
+# ── Fish Audio TTS（自然语音）──────────────────────────
+FISH_API_KEY = os.getenv("FISH_AUDIO_KEY", "")
+FISH_VOICE = os.getenv("FISH_VOICE", "default")  # 可换具体 voice ID
+
+
+@app.post("/api/tts-fish")
+async def fish_tts(req: ChatRequest):
+    """Fish Audio 自然语音合成"""
+    text = req.message.strip()[:800]
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty text")
+    if not FISH_API_KEY:
+        raise HTTPException(status_code=500, detail="Fish Audio API key not configured")
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.fish.audio/v1/tts",
+                headers={
+                    "Authorization": f"Bearer {FISH_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={"text": text, "voice": FISH_VOICE, "format": "mp3"},
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail=f"Fish Audio: {resp.text[:200]}")
+            return Response(content=resp.content, media_type="audio/mpeg",
+                          headers={"Content-Disposition": "inline"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Fish TTS error: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", "8000"))
