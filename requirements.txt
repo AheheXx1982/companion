@@ -4,3 +4,5 @@ httpx==0.28.1
 python-dotenv==1.1.0
 pydantic==2.10.4
 edge-tts==6.1.19
+sherpa-onnx==1.13.4
+soundfile==0.12.1

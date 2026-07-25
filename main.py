@@ -219,6 +219,52 @@ async def fish_tts(req: ChatRequest):
         raise HTTPException(status_code=500, detail=f"Fish TTS error: {str(e)}")
 
 
+# ── Sherpa-ONNX TTS（本地推理，免费无限）─────────────────
+SHERPA_MODEL_DIR = os.path.join(os.path.dirname(__file__), "tts_model", "vits-zh-hf-echo")
+_tts_engine = None
+
+
+def _get_tts_engine():
+    global _tts_engine
+    if _tts_engine is None:
+        import sherpa_onnx
+        if not os.path.exists(os.path.join(SHERPA_MODEL_DIR, "echo.onnx")):
+            raise RuntimeError("TTS model not found. Run download script first.")
+        _tts_engine = sherpa_onnx.OfflineTts(
+            sherpa_onnx.OfflineTtsConfig(
+                model=sherpa_onnx.OfflineTtsModelConfig(
+                    vits=sherpa_onnx.OfflineTtsVitsModelConfig(
+                        model=os.path.join(SHERPA_MODEL_DIR, "echo.onnx"),
+                        tokens=os.path.join(SHERPA_MODEL_DIR, "tokens.txt"),
+                        lexicon=os.path.join(SHERPA_MODEL_DIR, "lexicon.txt"),
+                        dict_dir=os.path.join(SHERPA_MODEL_DIR, "dict"),
+                    ),
+                ),
+            ),
+        )
+        print(f"Sherpa-ONNX TTS loaded from {SHERPA_MODEL_DIR}")
+    return _tts_engine
+
+
+@app.post("/api/tts-sherpa")
+async def sherpa_tts(req: ChatRequest):
+    """Sherpa-ONNX 本地 TTS"""
+    text = req.message.strip()[:800]
+    if not text:
+        raise HTTPException(status_code=400, detail="Empty text")
+    try:
+        import soundfile as sf
+        tts = _get_tts_engine()
+        audio = tts.generate(text, sid=0, speed=1.0)
+        buf = io.BytesIO()
+        sf.write(buf, audio.samples, audio.sample_rate, format="WAV")
+        buf.seek(0)
+        return Response(content=buf.read(), media_type="audio/wav",
+                       headers={"Content-Disposition": "inline"})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sherpa TTS error: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", "8000"))
