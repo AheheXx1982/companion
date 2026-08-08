@@ -63,6 +63,7 @@ print(f"Loaded {len(ALL_PAGES)} Wiki pages.")
 class ChatRequest(BaseModel):
     message: str
     history: Optional[list[dict]] = None  # [{"role": "user/assistant", "content": "..."}]
+    persona: str = "silentxx"  # silentxx=期权助手(默认) | wenxin=问心剑(问心站)
 
 
 class VisionRequest(BaseModel):
@@ -86,6 +87,35 @@ def health():
     return {"status": "ok", "wiki_loaded": len(ALL_PAGES) > 0}
 
 
+class SearchRequest(BaseModel):
+    q: str = ""
+    top_k: int = 5
+
+
+@app.get("/api/search")
+def search(req: SearchRequest = None, q: str = "", top_k: int = 5):
+    """传统搜索接口：关键词 → 匹配文章列表（标题/摘要/标签/链接）"""
+    query = (req.q if req else "") or q
+    query = query.strip()
+    if not query:
+        return {"query": "", "results": []}
+
+    results = search_pages(query, ALL_PAGES, top_k=max(1, min(top_k, 10)))
+    items = []
+    for p, score in results:
+        # 生成摘要（正文前 120 字符）
+        summary = p.content.strip().replace("\n", " ")[:120]
+        items.append({
+            "title": p.title,
+            "url": f"https://www.google.com/search?q=site%3Asilentxx.com+{p.title.replace(' ', '+')}",
+            "summary": summary,
+            "tags": p.tags[:5],
+            "score": score,
+            "confidence": p.confidence,
+        })
+    return {"query": query, "results": items}
+
+
 @app.post("/api/chat")
 async def chat(req: ChatRequest, background_tasks: BackgroundTasks):
     if not API_KEY:
@@ -101,7 +131,7 @@ async def chat(req: ChatRequest, background_tasks: BackgroundTasks):
     # 2. 获取记忆 + 组装 Prompt
     memory_context = get_memory_context()
     pages_only = [p for p, _ in results]
-    messages = build_prompt(question, pages_only, req.history, memory_context)
+    messages = build_prompt(question, pages_only, req.history, memory_context, persona=req.persona)
     
     # 3. 调用 LLM 流式返回 + 缓冲完整回复用于记忆
     full_reply = ""
